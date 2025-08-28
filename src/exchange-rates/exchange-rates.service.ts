@@ -35,7 +35,7 @@ export class ExchangeRatesService {
       // Ensure CUP currency exists (assuming CUP is the base currency for conversion)
       let cupCurrency = await this.currencyRepository.findOne({ where: { code: 'CUP' } });
       if (!cupCurrency) {
-        cupCurrency = this.currencyRepository.create({ code: 'CUP', name: 'Cuban Peso', symbol: 'CUP' });
+        cupCurrency = this.currencyRepository.create({ code: 'CUP', name: 'Cuban Peso', symbol: 'CUP', rateToCUP: 1 });
         await this.currencyRepository.save(cupCurrency);
       }
 

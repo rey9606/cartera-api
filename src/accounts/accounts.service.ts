@@ -20,19 +20,15 @@ export class AccountsService {
   ) {}
 
   async create(createAccountDto: CreateAccountDto): Promise<Account> {
-    const { currencies, ...accountData } = createAccountDto;
-    const account = this.accountsRepository.create(accountData);
+    const account = this.accountsRepository.create(createAccountDto);
     const savedAccount = await this.accountsRepository.save(account);
 
-    if (currencies && currencies.length > 0) {
-      const accountCurrencies: AccountCurrency[] = [];
-      for (const currencyCode of currencies) {
-        let currencyEntity = await this.currencyRepository.findOne({ where: { code: currencyCode } });
-        if (!currencyEntity) {
-          currencyEntity = this.currencyRepository.create({ code: currencyCode, name: currencyCode, symbol: currencyCode });
-          await this.currencyRepository.save(currencyEntity);
-        }
+    // Fetch all available currencies
+    const allCurrencies = await this.currencyRepository.find();
 
+    if (allCurrencies.length > 0) {
+      const accountCurrencies: AccountCurrency[] = [];
+      for (const currencyEntity of allCurrencies) {
         accountCurrencies.push(
           (() => {
             const newAccountCurrencyData: Partial<AccountCurrency> = {
@@ -70,41 +66,9 @@ export class AccountsService {
   }
 
   async update(id: string, updateAccountDto: UpdateAccountDto): Promise<Account> {
-    const { currencies, ...accountData } = updateAccountDto;
     const account = await this.findOne(id);
-    this.accountsRepository.merge(account, accountData);
+    this.accountsRepository.merge(account, updateAccountDto);
     const updatedAccount = await this.accountsRepository.save(account);
-
-    if (currencies !== undefined) {
-      await this.accountCurrenciesRepository.delete({ accountId: id });
-      if (currencies && currencies.length > 0) {
-        const accountCurrencies: AccountCurrency[] = [];
-        for (const currencyCode of currencies) {
-          let currencyEntity = await this.currencyRepository.findOne({ where: { code: currencyCode } });
-          if (!currencyEntity) {
-            currencyEntity = this.currencyRepository.create({ code: currencyCode, name: currencyCode, symbol: currencyCode });
-            await this.currencyRepository.save(currencyEntity);
-          }
-
-          accountCurrencies.push(
-            (() => {
-              const newAccountCurrencyData: Partial<AccountCurrency> = {
-                accountId: updatedAccount.id,
-                currency: currencyEntity,
-                amount: 0,
-              };
-              const newAccountCurrency = new AccountCurrency();
-              Object.assign(newAccountCurrency, newAccountCurrencyData);
-              return newAccountCurrency;
-            })()
-          );
-        }
-        await this.accountCurrenciesRepository.save(accountCurrencies);
-        updatedAccount.accountsCurrencies = accountCurrencies;
-      } else {
-        updatedAccount.accountsCurrencies = [];
-      }
-    }
 
     return this.transformAccount(updatedAccount);
   }
