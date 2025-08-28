@@ -8,6 +8,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Account } from './account.entity';
+import { Currency } from '../../exchange-rates/entities/currency.entity';
 
 @Entity('account_currencies')
 export class AccountCurrency {
@@ -21,8 +22,12 @@ export class AccountCurrency {
   @JoinColumn({ name: 'accountId' })
   account: Account;
 
-  @Column({ type: 'varchar', length: 10 }) // e.g., USD, EUR, CUP
-  currency: string;
+  @Column() // This will be the foreign key column
+  currencyId: number;
+
+  @ManyToOne(() => Currency)
+  @JoinColumn({ name: 'currencyId' })
+  currency: Currency;
 
   @Column({ type: 'decimal', precision: 18, scale: 8, default: 0 }) // Use higher precision for currency amounts
   amount: number;

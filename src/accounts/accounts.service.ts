@@ -6,6 +6,7 @@ import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
 import { AccountCurrency } from './entities/account-currency.entity';
 import { AccountCurrencyResponseDto } from './dto/account-currency-response.dto';
+import { Currency } from '../exchange-rates/entities/currency.entity';
 
 @Injectable()
 export class AccountsService {
@@ -14,6 +15,8 @@ export class AccountsService {
     private accountsRepository: Repository<Account>,
     @InjectRepository(AccountCurrency)
     private accountCurrenciesRepository: Repository<AccountCurrency>,
+    @InjectRepository(Currency)
+    private currencyRepository: Repository<Currency>,
   ) {}
 
   async create(createAccountDto: CreateAccountDto): Promise<Account> {
@@ -22,13 +25,27 @@ export class AccountsService {
     const savedAccount = await this.accountsRepository.save(account);
 
     if (currencies && currencies.length > 0) {
-      const accountCurrencies = currencies.map(currency =>
-        this.accountCurrenciesRepository.create({
-          accountId: savedAccount.id,
-          currency,
-          amount: 0,
-        })
-      );
+      const accountCurrencies: AccountCurrency[] = [];
+      for (const currencyCode of currencies) {
+        let currencyEntity = await this.currencyRepository.findOne({ where: { code: currencyCode } });
+        if (!currencyEntity) {
+          currencyEntity = this.currencyRepository.create({ code: currencyCode, name: currencyCode, symbol: currencyCode });
+          await this.currencyRepository.save(currencyEntity);
+        }
+
+        accountCurrencies.push(
+          (() => {
+            const newAccountCurrencyData: Partial<AccountCurrency> = {
+              accountId: savedAccount.id,
+              currency: currencyEntity,
+              amount: 0,
+            };
+            const newAccountCurrency = new AccountCurrency();
+            Object.assign(newAccountCurrency, newAccountCurrencyData);
+            return newAccountCurrency;
+          })()
+        );
+      }
       await this.accountCurrenciesRepository.save(accountCurrencies);
       savedAccount.accountsCurrencies = accountCurrencies;
     }
@@ -37,14 +54,14 @@ export class AccountsService {
   }
 
   async findAll(): Promise<Account[]> {
-    const accounts = await this.accountsRepository.find({ relations: ['accountsCurrencies'] });
+    const accounts = await this.accountsRepository.find({ relations: ['accountsCurrencies', 'accountsCurrencies.currency'] });
     return accounts.map(account => this.transformAccount(account));
   }
 
   async findOne(id: string): Promise<Account> {
     const account = await this.accountsRepository.findOne({
       where: { id },
-      relations: ['accountsCurrencies'],
+      relations: ['accountsCurrencies', 'accountsCurrencies.currency'],
     });
     if (!account) {
       throw new NotFoundException(`Account with ID "${id}" not found`);
@@ -61,13 +78,27 @@ export class AccountsService {
     if (currencies !== undefined) {
       await this.accountCurrenciesRepository.delete({ accountId: id });
       if (currencies && currencies.length > 0) {
-        const accountCurrencies = currencies.map(currency =>
-          this.accountCurrenciesRepository.create({
-            accountId: updatedAccount.id,
-            currency,
-            amount: 0,
-          })
-        );
+        const accountCurrencies: AccountCurrency[] = [];
+        for (const currencyCode of currencies) {
+          let currencyEntity = await this.currencyRepository.findOne({ where: { code: currencyCode } });
+          if (!currencyEntity) {
+            currencyEntity = this.currencyRepository.create({ code: currencyCode, name: currencyCode, symbol: currencyCode });
+            await this.currencyRepository.save(currencyEntity);
+          }
+
+          accountCurrencies.push(
+            (() => {
+              const newAccountCurrencyData: Partial<AccountCurrency> = {
+                accountId: updatedAccount.id,
+                currency: currencyEntity,
+                amount: 0,
+              };
+              const newAccountCurrency = new AccountCurrency();
+              Object.assign(newAccountCurrency, newAccountCurrencyData);
+              return newAccountCurrency;
+            })()
+          );
+        }
         await this.accountCurrenciesRepository.save(accountCurrencies);
         updatedAccount.accountsCurrencies = accountCurrencies;
       } else {
@@ -86,17 +117,16 @@ export class AccountsService {
   }
 
   private transformAccount(account: Account): Account {
-    const transformedAccount: any = { ...account }; // Create a shallow copy
+    const transformedAccount: any = { ...account };
 
     if (transformedAccount.accountsCurrencies) {
       transformedAccount.currencies = transformedAccount.accountsCurrencies.map(ac => ({
-        currency: ac.currency,
+        currency: ac.currency.code,
         amount: parseFloat(ac.amount.toString()),
-      })) as AccountCurrencyResponseDto[];
+      }));
     } else {
       transformedAccount.currencies = [];
     }
-    // Remove the original accountsCurrencies property from the copied object
     delete transformedAccount.accountsCurrencies;
     return transformedAccount;
   }
