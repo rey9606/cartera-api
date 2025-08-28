@@ -4,12 +4,11 @@ import { ExchangeRatesController } from './exchange-rates.controller';
 import { HttpModule } from '@nestjs/axios';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Currency } from './entities/currency.entity';
-import { ExchangeRate } from './entities/exchange-rate.entity';
 
 @Module({
   imports: [
     HttpModule,
-    TypeOrmModule.forFeature([Currency, ExchangeRate]),
+    TypeOrmModule.forFeature([Currency]),
   ],
   controllers: [ExchangeRatesController],
   providers: [ExchangeRatesService],

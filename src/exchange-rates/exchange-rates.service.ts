@@ -5,7 +5,6 @@ import * as cheerio from 'cheerio';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Currency } from './entities/currency.entity';
-import { ExchangeRate } from './entities/exchange-rate.entity';
 
 export interface ExchangeRateScraped {
   currency: string;
@@ -22,8 +21,6 @@ export class ExchangeRatesService {
     private readonly httpService: HttpService,
     @InjectRepository(Currency)
     private currencyRepository: Repository<Currency>,
-    @InjectRepository(ExchangeRate)
-    private exchangeRateRepository: Repository<ExchangeRate>,
   ) {}
 
   async findAll(): Promise<ExchangeRateScraped[]> {
@@ -33,6 +30,7 @@ export class ExchangeRatesService {
       const $ = cheerio.load(html);
 
       const scrapedRates: ExchangeRateScraped[] = [];
+      const uniqueCurrencies = new Set<string>(); // To track unique currency codes
 
       // Ensure CUP currency exists (assuming CUP is the base currency for conversion)
       let cupCurrency = await this.currencyRepository.findOne({ where: { code: 'CUP' } });
@@ -51,23 +49,25 @@ export class ExchangeRatesService {
         const change = changeText ? parseFloat(changeText.replace('+', '')) : undefined;
 
         if (currencyCode && !isNaN(value)) {
-          scrapedRates.push({ currency: currencyCode, value, change });
-
-          // Find or create the 'from' currency
-          let fromCurrency = await this.currencyRepository.findOne({ where: { code: currencyCode } });
-          if (!fromCurrency) {
-            fromCurrency = this.currencyRepository.create({ code: currencyCode, name: currencyCode, symbol: currencyCode }); // Use code as name/symbol for now
-            await this.currencyRepository.save(fromCurrency);
+          // Only add to scrapedRates if the currencyCode is unique
+          if (!uniqueCurrencies.has(currencyCode)) {
+            scrapedRates.push({ currency: currencyCode, value, change });
+            uniqueCurrencies.add(currencyCode);
           }
 
-          // Create and save the exchange rate
-          const newExchangeRate = this.exchangeRateRepository.create({
-            fromCurrency: fromCurrency,
-            toCurrency: cupCurrency,
-            value: value,
-            change: change,
-          });
-          await this.exchangeRateRepository.save(newExchangeRate);
+          // Find or create the 'from' currency and update its rateToCUP
+          let fromCurrency = await this.currencyRepository.findOne({ where: { code: currencyCode } });
+          if (!fromCurrency) {
+            fromCurrency = this.currencyRepository.create({
+              code: currencyCode,
+              name: currencyCode,
+              symbol: currencyCode,
+              rateToCUP: value,
+            });
+          } else {
+            fromCurrency.rateToCUP = value;
+          }
+          await this.currencyRepository.save(fromCurrency);
         }
       }
 

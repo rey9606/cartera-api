@@ -1,5 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
-import { ExchangeRate } from './exchange-rate.entity';
+import { Entity, PrimaryGeneratedColumn, Column, UpdateDateColumn } from 'typeorm';
 
 @Entity()
 export class Currency {
@@ -15,9 +14,9 @@ export class Currency {
   @Column({ nullable: true })
   symbol: string; // e.g., $, €, CUP
 
-  @OneToMany(() => ExchangeRate, exchangeRate => exchangeRate.fromCurrency)
-  sentExchangeRates: ExchangeRate[];
+  @Column('decimal', { precision: 10, scale: 4, nullable: true }) // Rate of this currency to CUP
+  rateToCUP: number;
 
-  @OneToMany(() => ExchangeRate, exchangeRate => exchangeRate.toCurrency)
-  receivedExchangeRates: ExchangeRate[];
+  @UpdateDateColumn() // Automatically updates on entity save
+  updatedAt: Date;
 }
