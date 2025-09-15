@@ -1,0 +1,49 @@
+name: Detect blocking relationships
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'  # Cada 15 minutos
+
+jobs:
+  check-blocking:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+
+    steps:
+      - name: Detect blocking issues and comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Consulta GraphQL para obtener relaciones de bloqueo
+          curl -s -H "Authorization: Bearer $GH_TOKEN" \
+               -H "Content-Type: application/json" \
+               -d '{
+                 "query": "query { repository(owner: \"rey9606\", name: \"cartera-api\") { issues(first: 100) { nodes { number title blockingIssues(first: 10) { nodes { number title } } labels(first: 10) { nodes { name } } } } } }"
+               }' \
+               https://api.github.com/graphql > result.json
+
+          # Procesar los resultados
+          jq -c '.data.repository.issues.nodes[]' result.json | while read issue; do
+            issue_number=$(echo "$issue" | jq '.number')
+            issue_title=$(echo "$issue" | jq -r '.title')
+            blockers=$(echo "$issue" | jq -c '.blockingIssues.nodes[]?')
+
+            for blocker in $blockers; do
+              blocker_number=$(echo "$blocker" | jq '.number')
+              blocker_title=$(echo "$blocker" | jq -r '.title')
+
+              # Comentar en la tarea que bloquea
+              curl -s -X POST -H "Authorization: Bearer $GH_TOKEN" \
+                   -H "Content-Type: application/json" \
+                   -d "{\"body\": \"Esta tarea está bloqueando a #$issue_number ($issue_title)\"}" \
+                   https://api.github.com/repos/rey9606/cartera-api/issues/$blocker_number/comments
+
+              # Cambiar la prioridad a P0 (agregar etiqueta)
+              curl -s -X POST -H "Authorization: Bearer $GH_TOKEN" \
+                   -H "Content-Type: application/json" \
+                   -d "{\"labels\": [\"P0\"]}" \
+                   https://api.github.com/repos/rey9606/cartera-api/issues/$blocker_number/labels
+            done
+          done
