@@ -1,4 +1,4 @@
-name: Summarize new issues
+name: Resumen y análisis de nuevos issues
 
 on:
   issues:
@@ -16,19 +16,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run AI inference
+      - name: Ejecutar inferencia con IA
         id: inference
         uses: actions/ai-inference@v1
         with:
           prompt: |
-            Summarize the following GitHub issue in one paragraph:
-            Title: ${{ github.event.issue.title }}      
-            Body: ${{ github.event.issue.body }}
+            Analiza el siguiente issue de GitHub y responde en español con:
+            1. Un resumen breve del problema planteado.
+            2. Qué información adicional sería útil para entender mejor el contexto.
+            3. Sugerencias para mejorar la redacción o claridad del issue.
+            4. Posibles etiquetas que podrían aplicarse (por ejemplo: documentación, bug, mejora).
+            5. Áreas del código que podrían estar relacionadas, si es posible inferirlo.
 
-      - name: Comment with AI summary
+            Título: ${{ github.event.issue.title }}
+            Descripción: ${{ github.event.issue.body }}
+
+      - name: Comentar con el análisis de IA
         run: |
-          gh issue comment $ISSUE_NUMBER --body '${{ steps.inference.outputs.response }}'
+          COMMENT=$(echo "${{ steps.inference.outputs.response }}" | jq -Rs .)
+          gh issue comment $ISSUE_NUMBER --body "$COMMENT"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
-          RESPONSE: ${{ steps.inference.outputs.response }}
